@@ -27,7 +27,7 @@ public:
     std::string GetPassword() const { return password_; }
 
 private:
-    COMMAND_TYPE command_;
+    COMMAND_TYPE command_ = (COMMAND_TYPE)-1;
     const std::unordered_map<std::string_view, COMMAND_TYPE> commandMapping_ = {
         {"encrypt", ProgramOptions::COMMAND_TYPE::ENCRYPT},
         {"decrypt", ProgramOptions::COMMAND_TYPE::DECRYPT},
