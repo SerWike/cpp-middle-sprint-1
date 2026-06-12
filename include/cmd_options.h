@@ -4,6 +4,8 @@
 #include <string>
 #include <unordered_map>
 
+namespace po = boost::program_options;
+
 namespace CryptoGuard {
 
 class ProgramOptions {
@@ -36,7 +38,7 @@ private:
     std::string outputFile_;
     std::string password_;
 
-    boost::program_options::options_description desc_;
+    po::options_description desc_;
 };
 
 }  // namespace CryptoGuard
