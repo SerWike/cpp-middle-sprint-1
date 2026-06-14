@@ -3,12 +3,17 @@
 #include <iostream>
 #include <memory>
 
+#include <boost/signals2/detail/scope_guard.hpp>
 #include <openssl/evp.h>
+#include <stdexcept>
 
 namespace CryptoGuard {
 
 class CryptoGuardCtx::Impl {
-private:
+
+    using uniqueCtxPtr =
+        std::unique_ptr<EVP_CIPHER_CTX, decltype([](EVP_CIPHER_CTX *ctx) { EVP_CIPHER_CTX_free(ctx); })>;
+
     struct AesCipherParams {
         static const size_t KEY_SIZE = 32;             // AES-256 key size
         static const size_t IV_SIZE = 16;              // AES block size (IV length)
@@ -24,13 +29,18 @@ public:
 
     ~Impl() { EVP_cleanup(); }
 
-    void EncryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) const {}
+    void EncryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) const {
+        this->EncryptDecrypt(inStream, outStream, password, 1);
+    }
 
-    void DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) const {}
+    void DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) const {
+        this->EncryptDecrypt(inStream, outStream, password, 0);
+    }
 
     std::string CalculateChecksum(std::iostream &inStream) const { return "NOT_IMPLEMENTED"; }
 
-    AesCipherParams CreateChipherParamsFromPassword(std::string_view password) {
+private:
+    AesCipherParams CreateChipherParamsFromPassword(std::string_view password) const {
         AesCipherParams params;
         constexpr std::array<unsigned char, 8> salt = {'1', '2', '3', '4', '5', '6', '7', '8'};
 
@@ -43,6 +53,47 @@ public:
         }
 
         return params;
+    }
+
+    void EncryptDecrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password,
+                        const int &mode) const {
+        if (!inStream.good())
+            throw std::runtime_error{"Input stream isn't good"};
+        if (!outStream.good())
+            throw std::runtime_error{"Output stream isn't good"};
+
+        // TODO how to check that inputstream not empty
+
+        auto params = this->CreateChipherParamsFromPassword(password);
+        params.encrypt = mode;
+
+        uniqueCtxPtr ctx{EVP_CIPHER_CTX_new()};
+
+        if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(), params.encrypt))
+            throw std::runtime_error{"Failed to init EVP context"};
+
+        unsigned char inBuffer[EVP_MAX_BLOCK_LENGTH];
+        unsigned char outBuffer[EVP_MAX_BLOCK_LENGTH];
+        int outLen;
+
+        // TODO what different between read and readsome?
+        int read_from_stream = inStream.readsome(reinterpret_cast<char *>(inBuffer), EVP_MAX_BLOCK_LENGTH);
+        do {
+            outLen = 0;
+            if (!EVP_CipherUpdate(ctx.get(), outBuffer, &outLen, inBuffer, read_from_stream))
+                std::runtime_error{"Failed in CipherUpdate"};  // TODO Can we get some info why fail?
+
+            outStream.write((const char *)outBuffer, outLen);
+            if (outStream.bad())
+                std::runtime_error{"Failed to write encrypted data in out stream"};
+
+            read_from_stream = inStream.readsome(reinterpret_cast<char *>(inBuffer), EVP_MAX_BLOCK_LENGTH);
+        } while (read_from_stream);
+
+        EVP_CipherFinal_ex(ctx.get(), outBuffer, &outLen);
+        outStream.write(reinterpret_cast<const char *>(outBuffer), outLen);
+        if (outStream.bad())
+            std::runtime_error{"Failed to write encrypted data in out stream"};
     }
 };
 
