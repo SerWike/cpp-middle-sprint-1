@@ -6,6 +6,7 @@
 
 #include <boost/signals2/detail/scope_guard.hpp>
 #include <iomanip>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <stdexcept>
 
@@ -44,13 +45,13 @@ public:
     std::string CalculateChecksum(std::iostream &inStream) const {
         uniqueMdCtxPtr ctx{EVP_MD_CTX_new()};
         if (!EVP_DigestInit_ex2(ctx.get(), EVP_sha256(), NULL))
-            throw std::runtime_error{"Failed to init Digest EVP context"};
+            throw std::runtime_error("Failed to init Digest EVP context: " + this->GetErrorMessage());
 
         unsigned char buffer[EVP_MAX_MD_SIZE];
         int read_from_stream = inStream.readsome(reinterpret_cast<char *>(buffer), EVP_MAX_MD_SIZE);
         do {
             if (!EVP_DigestUpdate(ctx.get(), buffer, read_from_stream))
-                throw std::runtime_error{"Failed in DigestUpdate"};  // TODO Can we get some info why fail?
+                throw std::runtime_error("Failed in DigestUpdate: " + this->GetErrorMessage());
 
             read_from_stream = inStream.readsome(reinterpret_cast<char *>(buffer), EVP_MAX_MD_SIZE);
         } while (read_from_stream);
@@ -58,7 +59,7 @@ public:
         unsigned int result_len = 0;
         std::memset(buffer, 0, EVP_MAX_MD_SIZE);
         if (!EVP_DigestFinal_ex(ctx.get(), buffer, &result_len))
-            throw std::runtime_error{"Failed in DigestFinal"};
+            throw std::runtime_error("Failed in DigestFinal: " + this->GetErrorMessage());
 
         std::stringstream result;
         result << std::hex << std::setfill('0');
@@ -79,10 +80,17 @@ private:
                                     params.key.data(), params.iv.data());
 
         if (result == 0) {
-            throw std::runtime_error{"Failed to create a key from password"};
+            throw std::runtime_error("Failed to create a key from password: " + this->GetErrorMessage());
         }
 
         return params;
+    }
+
+    std::string GetErrorMessage() const noexcept {
+        std::string result;
+        result.resize(256);
+        ERR_error_string_n(ERR_get_error(), result.data(), result.size());
+        return result;
     }
 
     void EncryptDecrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password,
@@ -100,7 +108,7 @@ private:
         uniqueCtxPtr ctx{EVP_CIPHER_CTX_new()};
 
         if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(), params.encrypt))
-            throw std::runtime_error{"Failed to init Cipher EVP context"};
+            throw std::runtime_error{"Failed to init Cipher EVP context:" + this->GetErrorMessage()};
 
         unsigned char inBuffer[EVP_MAX_BLOCK_LENGTH];
         unsigned char outBuffer[EVP_MAX_BLOCK_LENGTH];
@@ -111,19 +119,21 @@ private:
         do {
             outLen = 0;
             if (!EVP_CipherUpdate(ctx.get(), outBuffer, &outLen, inBuffer, read_from_stream))
-                std::runtime_error{"Failed in CipherUpdate"};  // TODO Can we get some info why fail?
+                throw std::runtime_error("Failed in CipherUpdate: " + this->GetErrorMessage());
 
             outStream.write((const char *)outBuffer, outLen);
             if (outStream.bad())
-                std::runtime_error{"Failed to write encrypted data in out stream"};
+                throw std::runtime_error("Failed to write encrypted data in out stream");
 
             read_from_stream = inStream.readsome(reinterpret_cast<char *>(inBuffer), EVP_MAX_BLOCK_LENGTH);
         } while (read_from_stream);
 
-        EVP_CipherFinal_ex(ctx.get(), outBuffer, &outLen);
+        if (!EVP_CipherFinal_ex(ctx.get(), outBuffer, &outLen))
+            throw std::runtime_error("Failed in EVP_CipherFinal_ex: " + this->GetErrorMessage());
+
         outStream.write(reinterpret_cast<const char *>(outBuffer), outLen);
         if (outStream.bad())
-            throw std::runtime_error{"Failed to write encrypted data in out stream"};
+            throw std::runtime_error("Failed to write encrypted data in out stream");
     }
 };
 
@@ -140,8 +150,7 @@ void CryptoGuardCtx::DecryptFile(std::iostream &inStream, std::iostream &outStre
 }
 
 std::string CryptoGuardCtx::CalculateChecksum(std::iostream &inStream) const {
-    std::string res = pImpl_->CalculateChecksum(inStream);
-    return res;
+    return pImpl_->CalculateChecksum(inStream);
 }
 
 }  // namespace CryptoGuard
