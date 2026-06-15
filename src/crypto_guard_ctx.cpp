@@ -43,6 +43,11 @@ public:
     }
 
     std::string CalculateChecksum(std::iostream &inStream) const {
+        if (!inStream.good())
+            throw std::runtime_error("Input stream isn't good");
+        if (inStream.rdbuf()->in_avail() <= 0)
+            throw std::runtime_error("Input stream is empty");
+
         uniqueMdCtxPtr ctx{EVP_MD_CTX_new()};
         if (!EVP_DigestInit_ex2(ctx.get(), EVP_sha256(), NULL))
             throw std::runtime_error("Failed to init Digest EVP context: " + this->GetErrorMessage());
@@ -96,9 +101,11 @@ private:
     void EncryptDecrypt(std::iostream &inStream, std::iostream &outStream, std::string_view password,
                         const int &mode) const {
         if (!inStream.good())
-            throw std::runtime_error{"Input stream isn't good"};
+            throw std::runtime_error("Input stream isn't good");
+        if (inStream.rdbuf()->in_avail() <= 0)
+            throw std::runtime_error("Input stream is empty");
         if (!outStream.good())
-            throw std::runtime_error{"Output stream isn't good"};
+            throw std::runtime_error("Output stream isn't good");
 
         // TODO how to check that inputstream not empty
 
