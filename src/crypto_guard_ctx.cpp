@@ -1,9 +1,11 @@
 #include "crypto_guard_ctx.h"
 
+#include <cstring>
 #include <iostream>
 #include <memory>
 
 #include <boost/signals2/detail/scope_guard.hpp>
+#include <iomanip>
 #include <openssl/evp.h>
 #include <stdexcept>
 
@@ -13,6 +15,8 @@ class CryptoGuardCtx::Impl {
 
     using uniqueCtxPtr =
         std::unique_ptr<EVP_CIPHER_CTX, decltype([](EVP_CIPHER_CTX *ctx) { EVP_CIPHER_CTX_free(ctx); })>;
+
+    using uniqueMdCtxPtr = std::unique_ptr<EVP_MD_CTX, decltype([](EVP_MD_CTX *ctx) { EVP_MD_CTX_free(ctx); })>;
 
     struct AesCipherParams {
         static const size_t KEY_SIZE = 32;             // AES-256 key size
@@ -37,7 +41,33 @@ public:
         this->EncryptDecrypt(inStream, outStream, password, 0);
     }
 
-    std::string CalculateChecksum(std::iostream &inStream) const { return "NOT_IMPLEMENTED"; }
+    std::string CalculateChecksum(std::iostream &inStream) const {
+        uniqueMdCtxPtr ctx{EVP_MD_CTX_new()};
+        if (!EVP_DigestInit_ex2(ctx.get(), EVP_sha256(), NULL))
+            throw std::runtime_error{"Failed to init Digest EVP context"};
+
+        unsigned char buffer[EVP_MAX_MD_SIZE];
+        int read_from_stream = inStream.readsome(reinterpret_cast<char *>(buffer), EVP_MAX_MD_SIZE);
+        do {
+            if (!EVP_DigestUpdate(ctx.get(), buffer, read_from_stream))
+                throw std::runtime_error{"Failed in DigestUpdate"};  // TODO Can we get some info why fail?
+
+            read_from_stream = inStream.readsome(reinterpret_cast<char *>(buffer), EVP_MAX_MD_SIZE);
+        } while (read_from_stream);
+
+        unsigned int result_len = 0;
+        std::memset(buffer, 0, EVP_MAX_MD_SIZE);
+        if (!EVP_DigestFinal_ex(ctx.get(), buffer, &result_len))
+            throw std::runtime_error{"Failed in DigestFinal"};
+
+        std::stringstream result;
+        result << std::hex << std::setfill('0');
+
+        for (size_t i = 0; i < result_len; ++i)
+            result << std::setw(2) << static_cast<int>(static_cast<unsigned char>(buffer[i]));
+
+        return result.str();
+    }
 
 private:
     AesCipherParams CreateChipherParamsFromPassword(std::string_view password) const {
@@ -70,7 +100,7 @@ private:
         uniqueCtxPtr ctx{EVP_CIPHER_CTX_new()};
 
         if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(), params.encrypt))
-            throw std::runtime_error{"Failed to init EVP context"};
+            throw std::runtime_error{"Failed to init Cipher EVP context"};
 
         unsigned char inBuffer[EVP_MAX_BLOCK_LENGTH];
         unsigned char outBuffer[EVP_MAX_BLOCK_LENGTH];
@@ -93,7 +123,7 @@ private:
         EVP_CipherFinal_ex(ctx.get(), outBuffer, &outLen);
         outStream.write(reinterpret_cast<const char *>(outBuffer), outLen);
         if (outStream.bad())
-            std::runtime_error{"Failed to write encrypted data in out stream"};
+            throw std::runtime_error{"Failed to write encrypted data in out stream"};
     }
 };
 
