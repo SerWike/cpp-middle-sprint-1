@@ -107,8 +107,6 @@ private:
         if (!outStream.good())
             throw std::runtime_error("Output stream isn't good");
 
-        // TODO how to check that inputstream not empty
-
         auto params = this->CreateChipherParamsFromPassword(password);
         params.encrypt = mode;
 
@@ -121,7 +119,6 @@ private:
         unsigned char outBuffer[EVP_MAX_BLOCK_LENGTH];
         int outLen;
 
-        // TODO what different between read and readsome?
         int read_from_stream = inStream.readsome(reinterpret_cast<char *>(inBuffer), EVP_MAX_BLOCK_LENGTH);
         do {
             outLen = 0;
