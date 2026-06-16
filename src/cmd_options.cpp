@@ -23,7 +23,7 @@ void ProgramOptions::Parse(int argc, char *argv[]) {
         po::store(po::parse_command_line(argc, argv, this->desc_), vm);
         po::notify(vm);
     } catch (const std::exception &e) {
-        throw std::runtime_error(std::format("Failed to parse parameters: %s", e.what()));
+        throw std::runtime_error(std::format("Failed to parse parameters: {}", e.what()));
     }
 
     if (vm.contains("help")) {
@@ -37,7 +37,7 @@ void ProgramOptions::Parse(int argc, char *argv[]) {
             this->command_ = this->commandMapping_.at(param_command);
         else {
             throw std::runtime_error(
-                std::format("Invalid command: %s\n Allowed: 'encrypt', 'decrypt', 'checksum'", param_command));
+                std::format("Invalid command: {}\n Allowed: 'encrypt', 'decrypt', 'checksum'", param_command));
         }
     }
     if (vm.contains("input"))
