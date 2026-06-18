@@ -17,9 +17,15 @@ int main(int argc, char *argv[]) {
         using COMMAND_TYPE = CryptoGuard::ProgramOptions::COMMAND_TYPE;
         switch (options.GetCommand()) {
         case COMMAND_TYPE::ENCRYPT: {
-            std::fstream input(options.GetInputFile(), std::ios_base::in);
-            std::fstream output(options.GetOutputFile(), std::ios_base::out);
+            std::fstream input, output;
             std::string password = options.GetPassword();
+
+            input.open(options.GetInputFile(), std::ios_base::in);
+            if (!input.is_open())
+                throw std::runtime_error(std::format("Failed to open input file: \"{}\"", options.GetInputFile()));
+            output.open(options.GetOutputFile(), std::ios_base::out);
+            if (!output.is_open())
+                throw std::runtime_error(std::format("Failed to open output file: \"{}\"", options.GetOutputFile()));
 
             cryptoCtx.EncryptFile(input, output, password);
 
@@ -27,9 +33,15 @@ int main(int argc, char *argv[]) {
             break;
         }
         case COMMAND_TYPE::DECRYPT: {
-            std::fstream input(options.GetInputFile(), std::ios_base::in);
-            std::fstream output(options.GetOutputFile(), std::ios_base::out);
+            std::fstream input, output;
             std::string password = options.GetPassword();
+
+            input.open(options.GetInputFile(), std::ios_base::in);
+            if (!input.is_open())
+                throw std::runtime_error(std::format("Failed to open input file: \"{}\"", options.GetInputFile()));
+            output.open(options.GetOutputFile(), std::ios_base::out);
+            if (!output.is_open())
+                throw std::runtime_error(std::format("Failed to open output file: \"{}\"", options.GetOutputFile()));
 
             cryptoCtx.DecryptFile(input, output, password);
 
@@ -37,7 +49,10 @@ int main(int argc, char *argv[]) {
             break;
         }
         case COMMAND_TYPE::CHECKSUM: {
-            std::fstream input(options.GetInputFile(), std::ios_base::in);
+            std::fstream input;
+            input.open(options.GetInputFile(), std::ios_base::in);
+            if (!input.is_open())
+                throw std::runtime_error(std::format("Failed to open input file: \"{}\"", options.GetInputFile()));
 
             std::string checksum = cryptoCtx.CalculateChecksum(input);
             std::print("Checksum: {}\n", checksum);
