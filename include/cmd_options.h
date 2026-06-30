@@ -4,6 +4,8 @@
 #include <string>
 #include <unordered_map>
 
+namespace po = boost::program_options;
+
 namespace CryptoGuard {
 
 class ProgramOptions {
@@ -25,7 +27,7 @@ public:
     std::string GetPassword() const { return password_; }
 
 private:
-    COMMAND_TYPE command_;
+    COMMAND_TYPE command_ = (COMMAND_TYPE)-1;
     const std::unordered_map<std::string_view, COMMAND_TYPE> commandMapping_ = {
         {"encrypt", ProgramOptions::COMMAND_TYPE::ENCRYPT},
         {"decrypt", ProgramOptions::COMMAND_TYPE::DECRYPT},
@@ -36,7 +38,7 @@ private:
     std::string outputFile_;
     std::string password_;
 
-    boost::program_options::options_description desc_;
+    po::options_description desc_;
 };
 
 }  // namespace CryptoGuard
